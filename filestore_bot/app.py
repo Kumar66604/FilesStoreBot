@@ -3,7 +3,7 @@
 from pyrogram import Client
 
 from .config import Settings
-from .database import create_users_collection
+from .database import create_database
 from .handlers.admin import register_admin_handlers
 from .handlers.user import register_user_handlers
 from .services.files import FileService
@@ -21,10 +21,11 @@ def create_app(settings: Settings) -> Client:
         workers=settings.workers,
         in_memory=True,
     )
-    users = create_users_collection(settings)
+    database = create_database(settings)
+    users = database.users
     links = LinkService(settings)
     files = FileService(settings)
-    subscriptions = SubscriptionService(users, settings)
+    subscriptions = SubscriptionService(database, settings)
     register_user_handlers(app, settings, users, links, files, subscriptions)
     register_admin_handlers(app, settings, links, files, BatchState(), subscriptions)
     return app

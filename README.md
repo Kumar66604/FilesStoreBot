@@ -24,6 +24,11 @@ filestore_bot/
 `DB_URI`, `DB_NAME`, `WORKERS`, `AUTO_DEL`, `PROTECT`, and `PORT` are optional
 and keep the previous defaults.
 
+MongoDB data is separated into `users`, `subscriptions`, `payments`,
+`subscription_packs`, `upi_accounts`, and `app_settings` collections. Existing
+legacy configuration and entitlement fields are migrated automatically when
+they are first accessed.
+
 For monetization, normal users can download `FREE_FILES` files for free. After
 that, the bot offers Telegram Stars and UPI. Configure these optional variables
 on Render:

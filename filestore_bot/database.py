@@ -1,10 +1,32 @@
-"""MongoDB setup."""
+"""MongoDB connection and separated application collections."""
 
-from motor.motor_asyncio import AsyncIOMotorClient
+from dataclasses import dataclass
+
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection
 
 from .config import Settings
 
 
-def create_users_collection(settings: Settings):
+@dataclass(slots=True)
+class Database:
+    client: AsyncIOMotorClient
+    users: AsyncIOMotorCollection
+    subscriptions: AsyncIOMotorCollection
+    payments: AsyncIOMotorCollection
+    subscription_packs: AsyncIOMotorCollection
+    upi_accounts: AsyncIOMotorCollection
+    app_settings: AsyncIOMotorCollection
+
+
+def create_database(settings: Settings) -> Database:
     client = AsyncIOMotorClient(settings.db_uri)
-    return client[settings.db_name].users
+    database = client[settings.db_name]
+    return Database(
+        client=client,
+        users=database.users,
+        subscriptions=database.subscriptions,
+        payments=database.payments,
+        subscription_packs=database.subscription_packs,
+        upi_accounts=database.upi_accounts,
+        app_settings=database.app_settings,
+    )
