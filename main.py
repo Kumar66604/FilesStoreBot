@@ -13,8 +13,12 @@ def main() -> None:
     settings = Settings.from_env()
     settings.validate()
     start_health_server(settings.port)
+    asyncio.run(_main(settings))
+
+
+async def _main(settings: Settings) -> None:
     app, subscriptions = create_app_with_services(settings)
-    app.run(_run_app(app, subscriptions))
+    await _run_app(app, subscriptions)
 
 
 async def _run_app(app, subscriptions) -> None:
