@@ -159,6 +159,13 @@ class SubscriptionService:
     async def clear_upi_pending(self, user_id: int) -> None:
         await self._users.update_one({"_id": user_id}, {"$unset": {"upi_pending": ""}})
 
+    async def cancel(self, user_id: int) -> bool:
+        result = await self._users.update_one(
+            {"_id": user_id, "subscription_until": {"$exists": True}},
+            {"$unset": {"subscription_until": "", "subscription_method": ""}},
+        )
+        return result.modified_count > 0
+
     async def free_status(self, user_id: int) -> tuple[int, datetime | None]:
         user = await self._users.find_one({"_id": user_id}, {"free_files_used": 1, "subscription_until": 1})
         if not user:

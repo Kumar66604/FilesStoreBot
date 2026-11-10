@@ -53,6 +53,7 @@ def register_admin_handlers(
             "/delupi ID - Remove a UPI account\n\n"
             "UPI APPROVAL\n"
             "/approve USER_ID - Approve that user's pending UPI payment\n"
+            "/cancelsub USER_ID - Immediately revoke an active subscription\n"
             "Before approving, verify the UTR, amount, selected pack, and destination account.\n\n"
             "OTHER\n"
             "/help - Show this admin manual\n"
@@ -154,6 +155,26 @@ def register_admin_handlers(
         await subscriptions.clear_upi_pending(user_id)
         await client.send_message(user_id, f"UPI payment approved ✅\nYour subscription is active until {expiry:%Y-%m-%d %H:%M} UTC.")
         await message.reply(f"Subscription activated for `{user_id}` until {expiry:%Y-%m-%d %H:%M} UTC.")
+
+    @app.on_message(filters.command("cancelsub") & filters.private & admin_only)
+    async def cancel_subscription_handler(client: Client, message) -> None:
+        if len(message.command) < 2:
+            await message.reply("Usage: /cancelsub USER_ID")
+            return
+        try:
+            user_id = int(message.command[1])
+        except ValueError:
+            await message.reply("USER_ID must be a number.")
+            return
+        cancelled = await subscriptions.cancel(user_id)
+        if not cancelled:
+            await message.reply("No active subscription was found for that user.")
+            return
+        await client.send_message(
+            user_id,
+            "Your subscription has been cancelled by an administrator. You can still use any remaining free allowance.",
+        )
+        await message.reply(f"Subscription cancelled for `{user_id}`.")
 
     @app.on_callback_query(filters.regex(r"^upireview:(approve|decline):(-?\d+)$") & admin_only)
     async def review_upi_handler(client: Client, query) -> None:
