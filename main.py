@@ -6,6 +6,18 @@ from pyrogram import Client, filters
 from pyrogram.errors import FloodWait
 
 import config
+import os, threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+class Ping(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200); self.end_headers(); self.wfile.write(b"ok")
+    def log_message(self, *a): pass
+
+def serve():
+    HTTPServer(("0.0.0.0", int(os.environ.get("PORT", 10000))), Ping).serve_forever()
+
+threading.Thread(target=serve, daemon=True).start()
 
 app = Client(
     "filestore",
