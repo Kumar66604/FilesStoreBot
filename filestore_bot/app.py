@@ -13,6 +13,11 @@ from .state import BatchState
 
 
 def create_app(settings: Settings) -> Client:
+    app, _subscriptions = create_app_with_services(settings)
+    return app
+
+
+def create_app_with_services(settings: Settings) -> tuple[Client, SubscriptionService]:
     app = Client(
         "filestore",
         api_id=settings.api_id,
@@ -28,4 +33,4 @@ def create_app(settings: Settings) -> Client:
     subscriptions = SubscriptionService(database, settings)
     register_user_handlers(app, settings, users, links, files, subscriptions)
     register_admin_handlers(app, settings, links, files, BatchState(), subscriptions)
-    return app
+    return app, subscriptions

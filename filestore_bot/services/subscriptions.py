@@ -1,9 +1,14 @@
 """Free-download limits and subscription entitlements."""
 
 from datetime import datetime, timedelta, timezone
+import asyncio
+import logging
+import math
 import re
 
 from ..config import Settings
+
+logger = logging.getLogger(__name__)
 
 
 def _utc_now() -> datetime:
@@ -168,6 +173,49 @@ class SubscriptionService:
             {"$set": {"enabled": enabled}},
             upsert=True,
         )
+
+    async def notify_expiring(self, client) -> None:
+        now = _utc_now()
+        cutoff = now + timedelta(days=3)
+        cursor = self._subscriptions.find(
+            {"subscription_until": {"$gt": now, "$lte": cutoff}},
+            {"subscription_until": 1, "_id": 1},
+        )
+        async for subscription in cursor:
+            expiry = _as_utc(subscription.get("subscription_until"))
+            if not expiry:
+                continue
+            days_left = math.ceil((expiry - now).total_seconds() / 86400)
+            if days_left not in {1, 2, 3}:
+                continue
+            notification_key = f"{expiry.isoformat()}:{days_left}"
+            result = await self._subscriptions.update_one(
+                {
+                    "_id": subscription["_id"],
+                    "subscription_until": subscription["subscription_until"],
+                    "expiry_notification_keys": {"$ne": notification_key},
+                },
+                {"$addToSet": {"expiry_notification_keys": notification_key}},
+            )
+            if result.modified_count:
+                try:
+                    await client.send_message(
+                        subscription["_id"],
+                        f"Your subscription expires in {days_left} day(s), on {expiry:%Y-%m-%d %H:%M} UTC.\n"
+                        "Renew before expiry to keep downloading without interruption.",
+                    )
+                except Exception:
+                    logger.exception("Could not send expiry notification to user %s", subscription["_id"])
+
+    async def expiry_notification_loop(self, client) -> None:
+        while True:
+            try:
+                await self.notify_expiring(client)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Subscription expiry notification check failed")
+            await asyncio.sleep(86400)
 
     async def can_download(self, user_id: int, file_count: int) -> bool:
         if not await self.is_enabled():

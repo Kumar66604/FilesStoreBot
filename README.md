@@ -64,6 +64,10 @@ Users select a pack first, then Stars or UPI, and finally a specific UPI
 account. The selected values are stored with the pending payment before the
 payment process starts.
 
+Users with an active subscription receive one reminder per day when 3, 2, and
+1 day remain before expiry. Notification delivery is tracked so each reminder
+is sent only once per subscription expiry.
+
 To create a link for a text message, an admin replies `/link` to that message.
 The same command works for media messages; direct media uploads to the bot also
 continue to generate links.
