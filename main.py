@@ -6,18 +6,6 @@ from pyrogram import Client, filters
 from pyrogram.errors import FloodWait
 
 import config
-import os, threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
-
-class Ping(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200); self.end_headers(); self.wfile.write(b"ok")
-    def log_message(self, *a): pass
-
-def serve():
-    HTTPServer(("0.0.0.0", int(os.environ.get("PORT", 10000))), Ping).serve_forever()
-
-threading.Thread(target=serve, daemon=True).start()
 
 app = Client(
     "filestore",
@@ -25,6 +13,7 @@ app = Client(
     api_hash=config.API_HASH,
     bot_token=config.BOT_TOKEN,
     workers=config.WORKERS,
+    in_memory=True,  # no .session file; fine on ephemeral hosts like Render
 )
 users = AsyncIOMotorClient(config.DB_URI)[config.DB_NAME].users
 admin_only = filters.user(config.ADMINS)
@@ -46,6 +35,17 @@ async def make_link(client: Client, first: int, last: int | None = None) -> str:
     raw = f"get-{first * K}" if last is None or last == first else f"get-{first * K}-{last * K}"
     me = await client.get_me()
     return f"https://t.me/{me.username}?start={encode(raw)}"
+
+
+def fwd_info(m):
+    """Return (chat_id, message_id) of a forwarded channel message (works across Pyrogram forks)."""
+    origin = getattr(m, "forward_origin", None)
+    if origin is not None and getattr(origin, "chat", None):
+        return origin.chat.id, getattr(origin, "message_id", None)
+    chat = getattr(m, "forward_from_chat", None)
+    if chat:
+        return chat.id, getattr(m, "forward_from_message_id", None)
+    return None, None
 
 
 async def delete_later(msgs, delay: int):
@@ -121,10 +121,9 @@ async def admin_message(client, message):
 
     # batch flow: expects forwards from the DB channel
     if state:
-        chat = message.forward_from_chat
-        if not chat or chat.id != config.DB_CHANNEL:
+        chat_id, msg_id = fwd_info(message)
+        if chat_id != config.DB_CHANNEL or not msg_id:
             return await message.reply("Please forward a message from the DB channel.")
-        msg_id = message.forward_from_message_id
         if state["step"] == "first":
             state.update(step="last", first=msg_id)
             return await message.reply("Now forward the LAST message.")
