@@ -59,6 +59,20 @@ def register_user_handlers(
             )
             asyncio.create_task(_delete_later(sent + [note], settings.auto_delete_seconds))
 
+    @app.on_message(filters.command("help") & filters.private & ~filters.user(settings.admins))
+    async def user_help_handler(_client: Client, message) -> None:
+        await message.reply(
+            "FilesStore Bot help\n\n"
+            "Open a file link sent by this bot to receive your files. "
+            f"The first {settings.free_files} files are free. After that, choose a subscription pack, "
+            "then pay with Telegram Stars or a configured UPI account.\n\n"
+            "Commands:\n"
+            "/start - Open a file link or show the welcome message\n"
+            "/help - Show this help\n"
+            "/upi PACK_ID UPI_ACCOUNT_ID UTR - Submit a UPI payment reference\n\n"
+            "UPI payments are checked manually by an admin. Never submit a UPI reference until your payment is complete."
+        )
+
     @app.on_callback_query(filters.regex(r"^pack:([a-z0-9_-]+)$"))
     async def pack_handler(_client: Client, query) -> None:
         pack = await subscriptions.get_pack(query.matches[0].group(1))

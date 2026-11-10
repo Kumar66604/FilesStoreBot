@@ -30,6 +30,35 @@ def register_admin_handlers(
 ) -> None:
     admin_only = filters.user(settings.admins)
 
+    @app.on_message(filters.command("help") & filters.private & admin_only)
+    async def admin_help_handler(_client: Client, message) -> None:
+        await message.reply(
+            "FilesStore Bot - admin manual\n\n"
+            "FILE MANAGEMENT\n"
+            "Send any media directly to the bot to store it and generate a link.\n"
+            "/batch - Create a link for a range of stored messages\n"
+            "  1. Send /batch\n"
+            "  2. Forward the first DB-channel message\n"
+            "  3. Forward the last DB-channel message\n"
+            "/cancel - Cancel the current batch operation\n\n"
+            "SUBSCRIPTION PACKS\n"
+            "/addpack ID STARS DAYS UPI_AMOUNT [NAME]\n"
+            "  Example: /addpack monthly 100 30 99 Monthly Plan\n"
+            "/listpacks - List all available packs\n"
+            "/delpack ID - Remove a pack (at least one must remain)\n\n"
+            "UPI ACCOUNTS\n"
+            "/addupi ID UPI_ID [LABEL]\n"
+            "  Example: /addupi primary example@upi Main Account\n"
+            "/listupi - List configured UPI accounts\n"
+            "/delupi ID - Remove a UPI account\n\n"
+            "UPI APPROVAL\n"
+            "/approve USER_ID - Approve that user's pending UPI payment\n"
+            "Before approving, verify the UTR, amount, selected pack, and destination account.\n\n"
+            "OTHER\n"
+            "/help - Show this admin manual\n"
+            "Admins bypass the free-file limit and subscription checks."
+        )
+
     @app.on_message(filters.command("addpack") & filters.private & admin_only)
     async def add_pack_handler(_client: Client, message) -> None:
         if len(message.command) < 5:
@@ -136,7 +165,7 @@ def register_admin_handlers(
         state.cancel(message.from_user.id)
         await message.reply("Cancelled.")
 
-    @app.on_message(filters.private & admin_only & ~filters.command(["start", "batch", "cancel"]))
+    @app.on_message(filters.private & admin_only & ~filters.command(["start", "help", "batch", "cancel"]))
     async def admin_message_handler(client: Client, message) -> None:
         admin_id = message.from_user.id
         pending = state.get(admin_id)
