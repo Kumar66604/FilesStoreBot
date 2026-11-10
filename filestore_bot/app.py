@@ -8,6 +8,7 @@ from .handlers.admin import register_admin_handlers
 from .handlers.user import register_user_handlers
 from .services.files import FileService
 from .services.links import LinkService
+from .services.subscriptions import SubscriptionService
 from .state import BatchState
 
 
@@ -23,6 +24,7 @@ def create_app(settings: Settings) -> Client:
     users = create_users_collection(settings)
     links = LinkService(settings)
     files = FileService(settings)
-    register_user_handlers(app, settings, users, links, files)
-    register_admin_handlers(app, settings, links, files, BatchState())
+    subscriptions = SubscriptionService(users, settings)
+    register_user_handlers(app, settings, users, links, files, subscriptions)
+    register_admin_handlers(app, settings, links, files, BatchState(), subscriptions)
     return app

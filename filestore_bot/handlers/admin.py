@@ -5,6 +5,7 @@ from pyrogram import Client, filters
 from ..config import Settings
 from ..services.files import FileService
 from ..services.links import LinkService
+from ..services.subscriptions import SubscriptionService
 from ..state import BatchState
 
 
@@ -19,8 +20,111 @@ def forwarded_message_info(message):
     return None, None
 
 
-def register_admin_handlers(app: Client, settings: Settings, links: LinkService, files: FileService, state: BatchState) -> None:
+def register_admin_handlers(
+    app: Client,
+    settings: Settings,
+    links: LinkService,
+    files: FileService,
+    state: BatchState,
+    subscriptions: SubscriptionService,
+) -> None:
     admin_only = filters.user(settings.admins)
+
+    @app.on_message(filters.command("addpack") & filters.private & admin_only)
+    async def add_pack_handler(_client: Client, message) -> None:
+        if len(message.command) < 5:
+            await message.reply("Usage: /addpack ID STARS DAYS UPI_AMOUNT [NAME]")
+            return
+        try:
+            pack_id, stars, days, upi_amount = message.command[1:5]
+            pack = await subscriptions.add_pack(
+                pack_id.lower(),
+                " ".join(message.command[5:]) or pack_id,
+                int(stars),
+                int(days),
+                upi_amount,
+            )
+        except (ValueError, TypeError) as error:
+            await message.reply(f"Could not add pack: {error}")
+            return
+        await message.reply(f"Pack added: `{pack['id']}` - {pack['name']}, {pack['days']} days, {pack['stars']} Stars")
+
+    @app.on_message(filters.command("listpacks") & filters.private & admin_only)
+    async def list_packs_handler(_client: Client, message) -> None:
+        packs = await subscriptions.list_packs()
+        await message.reply("Subscription packs:\n" + "\n".join(
+            f"- `{pack['id']}`: {pack['name']} | {pack['days']} days | {pack['stars']} Stars | Rs {pack['upi_amount']}"
+            for pack in packs
+        ))
+
+    @app.on_message(filters.command("delpack") & filters.private & admin_only)
+    async def delete_pack_handler(_client: Client, message) -> None:
+        if len(message.command) < 2:
+            await message.reply("Usage: /delpack ID")
+            return
+        try:
+            deleted = await subscriptions.delete_pack(message.command[1].lower())
+        except ValueError as error:
+            await message.reply(str(error))
+            return
+        await message.reply("Pack deleted." if deleted else "Pack ID not found.")
+
+    @app.on_message(filters.command("addupi") & filters.private & admin_only)
+    async def add_upi_handler(_client: Client, message) -> None:
+        if len(message.command) < 3:
+            await message.reply("Usage: /addupi ID UPI_ID [LABEL]")
+            return
+        try:
+            account = await subscriptions.add_upi_account(
+                message.command[1].lower(),
+                " ".join(message.command[3:]) or message.command[1],
+                message.command[2],
+            )
+        except ValueError as error:
+            await message.reply(f"Could not add UPI account: {error}")
+            return
+        await message.reply(f"UPI account added: `{account['id']}` - {account['label']}")
+
+    @app.on_message(filters.command("listupi") & filters.private & admin_only)
+    async def list_upi_handler(_client: Client, message) -> None:
+        accounts = await subscriptions.list_upi_accounts()
+        if not accounts:
+            await message.reply("No UPI accounts configured.")
+            return
+        await message.reply("UPI accounts:\n" + "\n".join(
+            f"- `{account['id']}`: {account['label']} - `{account['upi_id']}`" for account in accounts
+        ))
+
+    @app.on_message(filters.command("delupi") & filters.private & admin_only)
+    async def delete_upi_handler(_client: Client, message) -> None:
+        if len(message.command) < 2:
+            await message.reply("Usage: /delupi ID")
+            return
+        deleted = await subscriptions.delete_upi_account(message.command[1].lower())
+        await message.reply("UPI account deleted." if deleted else "UPI account ID not found.")
+
+    @app.on_message(filters.command("approve") & filters.private & admin_only)
+    async def approve_upi_handler(client: Client, message) -> None:
+        if len(message.command) < 2:
+            await message.reply("Usage: /approve USER_ID")
+            return
+        try:
+            user_id = int(message.command[1])
+        except ValueError:
+            await message.reply("USER_ID must be a number.")
+            return
+        pending = await subscriptions.get_upi_pending(user_id)
+        if not pending:
+            await message.reply("No pending UPI payment was found for that user.")
+            return
+        pack = await subscriptions.get_pack(pending["pack_id"])
+        if not pack:
+            await message.reply("The pending payment's pack no longer exists.")
+            return
+        expiry = await subscriptions.activate(user_id, "upi", pack["days"])
+        await subscriptions.clear_upi_pending(user_id)
+        await client.send_message(user_id, f"UPI payment approved ✅\nYour subscription is active until {expiry:%Y-%m-%d %H:%M} UTC.")
+        await message.reply(f"Subscription activated for `{user_id}` until {expiry:%Y-%m-%d %H:%M} UTC.")
 
     @app.on_message(filters.command("batch") & filters.private & admin_only)
     async def batch_handler(_client: Client, message) -> None:

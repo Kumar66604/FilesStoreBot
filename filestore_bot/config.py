@@ -28,6 +28,11 @@ class Settings:
     auto_delete_seconds: int
     protect_content: bool
     port: int
+    free_files: int
+    subscription_stars: int
+    subscription_days: int
+    upi_id: str
+    upi_amount: str
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -43,6 +48,11 @@ class Settings:
             auto_delete_seconds=int(os.environ.get("AUTO_DEL", "300")),
             protect_content=_env_bool("PROTECT", True),
             port=int(os.environ.get("PORT", "10000")),
+            free_files=int(os.environ.get("FREE_FILES", "3")),
+            subscription_stars=int(os.environ.get("SUBSCRIPTION_STARS", "100")),
+            subscription_days=int(os.environ.get("SUBSCRIPTION_DAYS", "30")),
+            upi_id=os.environ.get("UPI_ID", "").strip(),
+            upi_amount=os.environ.get("UPI_AMOUNT", "99").strip(),
         )
 
     def validate(self) -> None:
@@ -62,3 +72,9 @@ class Settings:
             raise ValueError("ADMINS must contain at least one Telegram user ID")
         if self.auto_delete_seconds < 0:
             raise ValueError("AUTO_DEL cannot be negative")
+        if self.free_files < 0:
+            raise ValueError("FREE_FILES cannot be negative")
+        if self.subscription_stars <= 0:
+            raise ValueError("SUBSCRIPTION_STARS must be greater than zero")
+        if self.subscription_days <= 0:
+            raise ValueError("SUBSCRIPTION_DAYS must be greater than zero")
