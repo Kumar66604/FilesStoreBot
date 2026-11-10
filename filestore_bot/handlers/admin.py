@@ -155,6 +155,37 @@ def register_admin_handlers(
         await client.send_message(user_id, f"UPI payment approved ✅\nYour subscription is active until {expiry:%Y-%m-%d %H:%M} UTC.")
         await message.reply(f"Subscription activated for `{user_id}` until {expiry:%Y-%m-%d %H:%M} UTC.")
 
+    @app.on_callback_query(filters.regex(r"^upireview:(approve|decline):(-?\d+)$") & admin_only)
+    async def review_upi_handler(client: Client, query) -> None:
+        action, raw_user_id = query.matches[0].groups()
+        user_id = int(raw_user_id)
+        await query.answer()
+        pending = await subscriptions.get_upi_pending(user_id)
+        if not pending:
+            await query.message.edit_text(f"UPI review already completed for `{user_id}`.")
+            return
+        if action == "decline":
+            await subscriptions.clear_upi_pending(user_id)
+            await client.send_message(
+                user_id,
+                "Your UPI payment proof was declined. Please check the payment details and submit a new proof if needed.",
+            )
+            await query.message.edit_text(f"UPI payment declined for `{user_id}`.")
+            return
+        pack = await subscriptions.get_pack(pending["pack_id"])
+        if not pack:
+            await query.message.edit_text(f"UPI review failed for `{user_id}`: the selected pack no longer exists.")
+            return
+        expiry = await subscriptions.activate(user_id, "upi", pack["days"])
+        await subscriptions.clear_upi_pending(user_id)
+        await client.send_message(
+            user_id,
+            f"UPI payment approved. Your subscription is active until {expiry:%Y-%m-%d %H:%M} UTC.",
+        )
+        await query.message.edit_text(
+            f"UPI payment approved for `{user_id}`. Subscription active until {expiry:%Y-%m-%d %H:%M} UTC."
+        )
+
     @app.on_message(filters.command("batch") & filters.private & admin_only)
     async def batch_handler(_client: Client, message) -> None:
         state.start(message.from_user.id)

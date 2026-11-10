@@ -197,6 +197,12 @@ def register_user_handlers(
                 f"UPI payment proof received\nUser: `{message.from_user.id}`\n"
                 f"Pack: `{pack_id}`\nAccount: `{account_id}`\nUTR: `{utr}`\n\n"
                 f"Verify the payment and use `/approve {message.from_user.id}`.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[
+                        InlineKeyboardButton("Approve", callback_data=f"upireview:approve:{message.from_user.id}"),
+                        InlineKeyboardButton("Decline", callback_data=f"upireview:decline:{message.from_user.id}"),
+                    ]]
+                ),
             )
         await message.reply("Your payment reference was sent for verification. Please wait for approval.")
 
