@@ -61,11 +61,16 @@ def register_user_handlers(
 
     @app.on_message(filters.command("help") & filters.private & ~filters.user(settings.admins))
     async def user_help_handler(_client: Client, message) -> None:
+        quota_text = (
+            f"The first {settings.free_files} files are free. After that, choose a subscription pack, "
+            "then pay with Telegram Stars or a configured UPI account."
+            if await subscriptions.is_enabled()
+            else "Subscription mode is currently disabled, so downloads are available without payment checks."
+        )
         await message.reply(
             "FilesStore Bot help\n\n"
             "Open a file link sent by this bot to receive your files. "
-            f"The first {settings.free_files} files are free. After that, choose a subscription pack, "
-            "then pay with Telegram Stars or a configured UPI account.\n\n"
+            f"{quota_text}\n\n"
             "Commands:\n"
             "/start - Open a file link or show the welcome message\n"
             "/help - Show this help\n"

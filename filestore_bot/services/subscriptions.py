@@ -103,7 +103,20 @@ class SubscriptionService:
         await self._users.update_one({"_id": "config:upi_accounts"}, {"$set": {"items": remaining}}, upsert=True)
         return True
 
+    async def is_enabled(self) -> bool:
+        document = await self._users.find_one({"_id": "config:subscription_settings"})
+        return document.get("enabled", True) if document else True
+
+    async def set_enabled(self, enabled: bool) -> None:
+        await self._users.update_one(
+            {"_id": "config:subscription_settings"},
+            {"$set": {"enabled": enabled}},
+            upsert=True,
+        )
+
     async def can_download(self, user_id: int, file_count: int) -> bool:
+        if not await self.is_enabled():
+            return True
         user = await self._users.find_one({"_id": user_id}, {"subscription_until": 1, "free_files_used": 1})
         expiry = _as_utc(user.get("subscription_until")) if user else None
         if expiry and expiry > _utc_now():
@@ -112,6 +125,8 @@ class SubscriptionService:
         return used + file_count <= self._settings.free_files
 
     async def record_free_downloads(self, user_id: int, file_count: int) -> None:
+        if not await self.is_enabled():
+            return
         await self._users.update_one(
             {"_id": user_id},
             {"$inc": {"free_files_used": file_count}},

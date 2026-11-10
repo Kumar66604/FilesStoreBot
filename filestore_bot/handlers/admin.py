@@ -35,7 +35,8 @@ def register_admin_handlers(
         await message.reply(
             "FilesStore Bot - admin manual\n\n"
             "FILE MANAGEMENT\n"
-            "Send any media directly to the bot to store it and generate a link.\n"
+            "Reply /link to any text or media message to store it and generate a link.\n"
+            "/link - Reply to a message to create a file link\n"
             "/batch - Create a link for a range of stored messages\n"
             "  1. Send /batch\n"
             "  2. Forward the first DB-channel message\n"
@@ -56,6 +57,7 @@ def register_admin_handlers(
             "/cancelsub USER_ID - Immediately revoke an active subscription\n"
             "Before approving, verify the UTR, amount, selected pack, and destination account.\n\n"
             "OTHER\n"
+            "/submode on|off|status - Enable or disable subscription enforcement\n"
             "/help - Show this admin manual\n"
             "Admins bypass the free-file limit and subscription checks."
         )
@@ -133,6 +135,24 @@ def register_admin_handlers(
         deleted = await subscriptions.delete_upi_account(message.command[1].lower())
         await message.reply("UPI account deleted." if deleted else "UPI account ID not found.")
 
+    @app.on_message(filters.command("submode") & filters.private & admin_only)
+    async def subscription_mode_handler(_client: Client, message) -> None:
+        if len(message.command) < 2 or message.command[1].lower() not in {"on", "off", "status"}:
+            await message.reply("Usage: /submode on|off|status")
+            return
+        action = message.command[1].lower()
+        if action == "status":
+            state = "ON" if await subscriptions.is_enabled() else "OFF"
+            await message.reply(f"Subscription mode is currently {state}.")
+            return
+        enabled = action == "on"
+        await subscriptions.set_enabled(enabled)
+        await message.reply(
+            "Subscription mode enabled. Free limits and payment checks are active."
+            if enabled
+            else "Subscription mode disabled. All users can download without payment checks."
+        )
+
     @app.on_message(filters.command("approve") & filters.private & admin_only)
     async def approve_upi_handler(client: Client, message) -> None:
         if len(message.command) < 2:
@@ -176,6 +196,15 @@ def register_admin_handlers(
         )
         await message.reply(f"Subscription cancelled for `{user_id}`.")
 
+    @app.on_message(filters.command("link") & filters.private & admin_only)
+    async def link_reply_handler(client: Client, message) -> None:
+        source = message.reply_to_message
+        if source is None:
+            await message.reply("Reply /link to the text or media message you want to store.")
+            return
+        stored = await files.store(source, settings.db_channel)
+        await message.reply(f"Link:\n{await links.make_link(client, stored.id)}")
+
     @app.on_callback_query(filters.regex(r"^upireview:(approve|decline):(-?\d+)$") & admin_only)
     async def review_upi_handler(client: Client, query) -> None:
         action, raw_user_id = query.matches[0].groups()
@@ -217,7 +246,7 @@ def register_admin_handlers(
         state.cancel(message.from_user.id)
         await message.reply("Cancelled.")
 
-    @app.on_message(filters.private & admin_only & ~filters.command(["start", "help", "batch", "cancel"]))
+    @app.on_message(filters.private & admin_only & ~filters.command(["start", "help", "link", "submode", "batch", "cancel"]))
     async def admin_message_handler(client: Client, message) -> None:
         admin_id = message.from_user.id
         pending = state.get(admin_id)

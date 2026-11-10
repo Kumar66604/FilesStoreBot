@@ -41,7 +41,7 @@ are manual: the user selects a pack and UPI account, sends `/upi PACK_ID
 UPI_ACCOUNT_ID UTR_NUMBER`, an admin verifies the payment, then runs
 `/approve USER_ID`.
 
-Admins can manage payment options from the bot:
+Admins can manage payment options and subscription enforcement from the bot:
 
 ```text
 /addpack ID STARS DAYS UPI_AMOUNT [NAME]
@@ -50,11 +50,18 @@ Admins can manage payment options from the bot:
 /addupi ID UPI_ID [LABEL]
 /listupi
 /delupi ID
+/submode on|off|status
+/cancelsub USER_ID
+/link                 # reply to any text or media message
 ```
 
 Users select a pack first, then Stars or UPI, and finally a specific UPI
 account. The selected values are stored with the pending payment before the
 payment process starts.
+
+To create a link for a text message, an admin replies `/link` to that message.
+The same command works for media messages; direct media uploads to the bot also
+continue to generate links.
 
 Run it with:
 
