@@ -17,18 +17,20 @@ def main() -> None:
 
 
 async def _main(settings: Settings) -> None:
-    app, subscriptions = create_app_with_services(settings)
-    await _run_app(app, subscriptions)
+    app, payment_app, subscriptions = create_app_with_services(settings)
+    await _run_app(app, payment_app, subscriptions)
 
 
-async def _run_app(app, subscriptions) -> None:
+async def _run_app(app, payment_app, subscriptions) -> None:
     await app.start()
+    await payment_app.start()
     expiry_task = asyncio.create_task(subscriptions.expiry_notification_loop(app))
     try:
         await idle()
     finally:
         expiry_task.cancel()
         await asyncio.gather(expiry_task, return_exceptions=True)
+        await payment_app.stop()
         await app.stop()
 
 

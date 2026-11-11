@@ -20,6 +20,9 @@ class Settings:
     api_id: int
     api_hash: str
     bot_token: str
+    bot_username: str
+    payment_bot_token: str
+    payment_bot_username: str
     workers: int
     db_uri: str
     db_name: str
@@ -40,6 +43,9 @@ class Settings:
             api_id=int(os.environ.get("API_ID", "0")),
             api_hash=os.environ.get("API_HASH", ""),
             bot_token=os.environ.get("BOT_TOKEN", ""),
+            bot_username=os.environ.get("BOT_USERNAME", "").strip().lstrip("@"),
+            payment_bot_token=os.environ.get("PAYMENT_BOT_TOKEN", ""),
+            payment_bot_username=os.environ.get("PAYMENT_BOT_USERNAME", "").strip().lstrip("@"),
             workers=int(os.environ.get("WORKERS", "5")),
             db_uri=os.environ.get("DB_URI", "mongodb://localhost:27017"),
             db_name=os.environ.get("DB_NAME", "filestore"),
@@ -62,6 +68,9 @@ class Settings:
                 "API_ID": self.api_id,
                 "API_HASH": self.api_hash,
                 "BOT_TOKEN": self.bot_token,
+                "BOT_USERNAME": self.bot_username,
+                "PAYMENT_BOT_TOKEN": self.payment_bot_token,
+                "PAYMENT_BOT_USERNAME": self.payment_bot_username,
                 "DB_CHANNEL": self.db_channel,
             }.items()
             if not value
@@ -70,6 +79,8 @@ class Settings:
             raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
         if not self.admins:
             raise ValueError("ADMINS must contain at least one Telegram user ID")
+        if self.payment_bot_token == self.bot_token:
+            raise ValueError("PAYMENT_BOT_TOKEN must belong to a different bot")
         if self.auto_delete_seconds < 0:
             raise ValueError("AUTO_DEL cannot be negative")
         if self.free_files < 0:

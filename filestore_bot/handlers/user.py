@@ -5,7 +5,7 @@ import time
 from datetime import datetime, timezone
 
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from ..config import Settings
 from ..services.files import FileService
@@ -141,15 +141,14 @@ def register_user_handlers(
                 reply_markup=_upi_keyboard(pack_id, accounts),
             )
             return
-        payload = f"subscription:{pack_id}:{query.from_user.id}:{int(time.time())}"
-        await client.send_invoice(
-            chat_id=query.from_user.id,
-            title="FilesStore subscription",
-            description=f"{pack['days']} days of unlimited file downloads",
-            payload=payload,
-            provider_token="",
-            currency="XTR",
-            prices=[LabeledPrice(pack["name"], pack["stars"])],
+        await query.message.reply(
+            "Tap the button below to open the secure payment page. After payment, return here to download your files.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton(
+                    "Continue to Stars payment",
+                    url=f"https://t.me/{settings.payment_bot_username}?start=pay_{pack_id}",
+                )]]
+            ),
         )
 
     @app.on_callback_query(filters.regex(r"^upi:([a-z0-9_-]+):([a-z0-9_-]+)$"))
@@ -188,40 +187,6 @@ def register_user_handlers(
             f"{pack['name']} - Rs {pack['upi_amount']}\nChoose another UPI account:",
             reply_markup=_upi_keyboard(pack_id, await subscriptions.list_upi_accounts()),
         )
-
-    @app.on_pre_checkout_query()
-    async def pre_checkout_handler(query) -> None:
-        valid = query.invoice_payload.startswith("subscription:") and query.currency == "XTR"
-        if valid:
-            parts = query.invoice_payload.split(":")
-            pack = await subscriptions.get_pack(parts[1]) if len(parts) == 4 else None
-            valid = bool(
-                pack
-                and str(query.from_user.id) == parts[2]
-                and query.total_amount == pack["stars"]
-            )
-        await query.answer(ok=valid, error_message=None if valid else "This subscription invoice is no longer valid.")
-
-    @app.on_message(filters.successful_payment & filters.private)
-    async def successful_payment_handler(_client: Client, message) -> None:
-        payment = message.successful_payment
-        parts = payment.invoice_payload.split(":")
-        pack = await subscriptions.get_pack(parts[1]) if len(parts) == 4 else None
-        if (
-            payment.currency != "XTR"
-            or not pack
-            or str(message.from_user.id) != parts[2]
-            or payment.total_amount != pack["stars"]
-        ):
-            await message.reply("Payment received, but the invoice amount could not be verified. Contact an admin.")
-            return
-        expiry = await subscriptions.activate(
-            message.from_user.id,
-            "telegram_stars",
-            pack["days"],
-            payment.telegram_payment_charge_id,
-        )
-        await message.reply(f"Payment successful. Your subscription is active until {expiry:%Y-%m-%d %H:%M} UTC.")
 
     @app.on_message(filters.command("upi") & filters.private)
     async def upi_reference_handler(client: Client, message) -> None:

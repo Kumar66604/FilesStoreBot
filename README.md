@@ -20,7 +20,11 @@ filestore_bot/
 
 ## Environment variables
 
-`API_ID`, `API_HASH`, `BOT_TOKEN`, `DB_CHANNEL`, and `ADMINS` are required.
+`API_ID`, `API_HASH`, `BOT_TOKEN`, `BOT_USERNAME`, `PAYMENT_BOT_TOKEN`,
+`PAYMENT_BOT_USERNAME`, `DB_CHANNEL`, and `ADMINS` are required. The main bot
+and payment bot run together in the same process and deployment; they only
+need separate tokens. Create the payment bot with BotFather and set its
+username without the `@` sign.
 `DB_URI`, `DB_NAME`, `WORKERS`, `AUTO_DEL`, `PROTECT`, and `PORT` are optional
 and keep the previous defaults.
 
@@ -57,6 +61,12 @@ SUBSCRIPTION_DAYS=30
 UPI_ID=your-upi-id@bank
 UPI_AMOUNT=99
 ```
+
+When a user chooses Stars, the main bot opens the payment bot through a deep
+link. The payment bot issues and verifies the invoice, then writes the active
+subscription to the same MongoDB database. After payment, the user taps the
+button back to the main bot. Both clients are started and stopped by the same
+`main.py` process.
 
 Telegram Stars activate automatically after successful payment. UPI payments
 are manual: the user selects a pack and UPI account, sends `/upi PACK_ID

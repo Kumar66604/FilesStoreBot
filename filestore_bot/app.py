@@ -5,6 +5,7 @@ from pyrogram import Client
 from .config import Settings
 from .database import create_database
 from .handlers.admin import register_admin_handlers
+from .handlers.payments import register_payment_handlers
 from .handlers.user import register_user_handlers
 from .services.files import FileService
 from .services.force_subscriptions import ForceSubscriptionService
@@ -14,11 +15,11 @@ from .state import BatchState
 
 
 def create_app(settings: Settings) -> Client:
-    app, _subscriptions = create_app_with_services(settings)
+    app, _payment_app, _subscriptions = create_app_with_services(settings)
     return app
 
 
-def create_app_with_services(settings: Settings) -> tuple[Client, SubscriptionService]:
+def create_app_with_services(settings: Settings) -> tuple[Client, Client, SubscriptionService]:
     app = Client(
         "filestore",
         api_id=settings.api_id,
@@ -35,4 +36,13 @@ def create_app_with_services(settings: Settings) -> tuple[Client, SubscriptionSe
     force_subscriptions = ForceSubscriptionService(database)
     register_user_handlers(app, settings, users, links, files, subscriptions, force_subscriptions)
     register_admin_handlers(app, settings, links, files, BatchState(), subscriptions, force_subscriptions)
-    return app, subscriptions
+    payment_app = Client(
+        "filestore-payment",
+        api_id=settings.api_id,
+        api_hash=settings.api_hash,
+        bot_token=settings.payment_bot_token,
+        workers=settings.workers,
+        in_memory=True,
+    )
+    register_payment_handlers(payment_app, settings, subscriptions)
+    return app, payment_app, subscriptions
