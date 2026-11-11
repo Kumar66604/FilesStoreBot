@@ -4,6 +4,7 @@ from pyrogram import Client, filters
 
 from ..config import Settings
 from ..services.files import FileService
+from ..services.force_subscriptions import ForceSubscriptionService
 from ..services.links import LinkService
 from ..services.subscriptions import SubscriptionService
 from ..state import BatchState
@@ -27,6 +28,7 @@ def register_admin_handlers(
     files: FileService,
     state: BatchState,
     subscriptions: SubscriptionService,
+    force_subscriptions: ForceSubscriptionService,
 ) -> None:
     admin_only = filters.user(settings.admins)
 
@@ -58,6 +60,10 @@ def register_admin_handlers(
             "Before approving, verify the UTR, amount, selected pack, and destination account.\n\n"
             "OTHER\n"
             "/submode on|off|status - Enable or disable subscription enforcement\n"
+            "FORCE SUBSCRIPTION\n"
+            "/addforce CHAT_ID join|request [NAME] - Add or replace a required chat\n"
+            "/listforce - List required chats\n"
+            "/delforce CHAT_ID - Remove a required chat\n"
             "/help - Show this admin manual\n"
             "Admins bypass the free-file limit and subscription checks."
         )
@@ -153,6 +159,51 @@ def register_admin_handlers(
             else "Subscription mode disabled. All users can download without payment checks."
         )
 
+    @app.on_message(filters.command("addforce") & filters.private & admin_only)
+    async def add_force_handler(client: Client, message) -> None:
+        if len(message.command) < 3:
+            await message.reply("Usage: /addforce CHAT_ID join|request [NAME]")
+            return
+        try:
+            chat_id = int(message.command[1])
+            force = await force_subscriptions.add(
+                client, chat_id, message.command[2].lower(), " ".join(message.command[3:])
+            )
+        except (ValueError, TypeError) as error:
+            await message.reply(f"Could not configure force subscription: {error}")
+            return
+        except Exception as error:
+            await message.reply(
+                "Could not access that chat. Add the bot to it as an administrator, then try again.\n"
+                f"Telegram error: {error}"
+            )
+            return
+        mode_text = "membership" if force["mode"] == "join" else "join request approval"
+        await message.reply(f"Force subscription saved for {force['title']} ({mode_text}).\n{force['link']}")
+
+    @app.on_message(filters.command("listforce") & filters.private & admin_only)
+    async def list_force_handler(_client: Client, message) -> None:
+        forces = await force_subscriptions.list()
+        if not forces:
+            await message.reply("No force-subscription chats are configured.")
+            return
+        await message.reply("Force-subscription chats:\n" + "\n".join(
+            f"- `{force['chat_id']}` {force['title']} | {force['mode']} | {force['link']}"
+            for force in forces
+        ))
+
+    @app.on_message(filters.command("delforce") & filters.private & admin_only)
+    async def delete_force_handler(_client: Client, message) -> None:
+        if len(message.command) < 2:
+            await message.reply("Usage: /delforce CHAT_ID")
+            return
+        try:
+            chat_id = int(message.command[1])
+        except ValueError:
+            await message.reply("CHAT_ID must be a number.")
+            return
+        await message.reply("Force subscription removed." if await force_subscriptions.remove(chat_id) else "Chat ID not found.")
+
     @app.on_message(filters.command("approve") & filters.private & admin_only)
     async def approve_upi_handler(client: Client, message) -> None:
         if len(message.command) < 2:
@@ -246,7 +297,9 @@ def register_admin_handlers(
         state.cancel(message.from_user.id)
         await message.reply("Cancelled.")
 
-    @app.on_message(filters.private & admin_only & ~filters.command(["start", "help", "link", "submode", "batch", "cancel"]))
+    @app.on_message(filters.private & admin_only & ~filters.command([
+        "start", "help", "link", "submode", "addforce", "listforce", "delforce", "batch", "cancel",
+    ]))
     async def admin_message_handler(client: Client, message) -> None:
         admin_id = message.from_user.id
         pending = state.get(admin_id)

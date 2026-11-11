@@ -29,6 +29,23 @@ MongoDB data is separated into `users`, `subscriptions`, `payments`,
 legacy configuration and entitlement fields are migrated automatically when
 they are first accessed.
 
+Force-subscription chats are stored in the `force_subscriptions` collection and
+can be configured by an admin from the bot using numeric Telegram chat IDs:
+
+```text
+/addforce CHAT_ID join [NAME]       # require membership
+/addforce CHAT_ID request [NAME]    # require a join request
+/listforce
+/delforce CHAT_ID
+```
+
+The bot must be an administrator in each configured chat. `join` uses ordinary
+membership checks. `request` creates a join-request invite link and records a
+user's request through Telegram's join-request update, allowing that user to
+use the bot immediately while the chat administrator decides whether to approve
+the request. Private chats use bot-generated invite links; public chats use
+their public link for ordinary membership mode.
+
 For monetization, normal users can download `FREE_FILES` files for free. After
 that, the bot offers Telegram Stars and UPI. Configure these optional variables
 on Render:

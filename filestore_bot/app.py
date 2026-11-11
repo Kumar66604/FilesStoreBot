@@ -7,6 +7,7 @@ from .database import create_database
 from .handlers.admin import register_admin_handlers
 from .handlers.user import register_user_handlers
 from .services.files import FileService
+from .services.force_subscriptions import ForceSubscriptionService
 from .services.links import LinkService
 from .services.subscriptions import SubscriptionService
 from .state import BatchState
@@ -31,6 +32,7 @@ def create_app_with_services(settings: Settings) -> tuple[Client, SubscriptionSe
     links = LinkService(settings)
     files = FileService(settings)
     subscriptions = SubscriptionService(database, settings)
-    register_user_handlers(app, settings, users, links, files, subscriptions)
-    register_admin_handlers(app, settings, links, files, BatchState(), subscriptions)
+    force_subscriptions = ForceSubscriptionService(database)
+    register_user_handlers(app, settings, users, links, files, subscriptions, force_subscriptions)
+    register_admin_handlers(app, settings, links, files, BatchState(), subscriptions, force_subscriptions)
     return app, subscriptions

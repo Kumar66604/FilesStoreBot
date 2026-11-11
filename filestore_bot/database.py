@@ -16,6 +16,7 @@ class Database:
     subscription_packs: AsyncIOMotorCollection
     upi_accounts: AsyncIOMotorCollection
     app_settings: AsyncIOMotorCollection
+    force_subscriptions: AsyncIOMotorCollection
 
 
 def create_database(settings: Settings) -> Database:
@@ -29,4 +30,5 @@ def create_database(settings: Settings) -> Database:
         subscription_packs=database.subscription_packs,
         upi_accounts=database.upi_accounts,
         app_settings=database.app_settings,
+        force_subscriptions=database.force_subscriptions,
     )

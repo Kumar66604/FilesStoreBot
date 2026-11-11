@@ -9,6 +9,7 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, LabeledPr
 
 from ..config import Settings
 from ..services.files import FileService
+from ..services.force_subscriptions import ForceSubscriptionService
 from ..services.links import LinkService
 from ..services.subscriptions import SubscriptionService
 
@@ -20,7 +21,29 @@ def register_user_handlers(
     links: LinkService,
     files: FileService,
     subscriptions: SubscriptionService,
+    force_subscriptions: ForceSubscriptionService,
 ) -> None:
+    async def require_force_subscription(client: Client, message) -> bool:
+        if message.from_user.id in settings.admins or await force_subscriptions.is_allowed(client, message.from_user.id):
+            return True
+        await message.reply(
+            "Please join or request to join all required chats before using this bot.",
+            reply_markup=await force_subscriptions.keyboard(),
+        )
+        return False
+
+    @app.on_chat_join_request()
+    async def chat_join_request_handler(_client: Client, request) -> None:
+        if request.from_user:
+            await force_subscriptions.record_join_request(request.chat.id, request.from_user.id)
+
+    @app.on_callback_query(filters.regex(r"^forcesub:check$"))
+    async def force_subscription_check_handler(client: Client, query) -> None:
+        if await force_subscriptions.is_allowed(client, query.from_user.id):
+            await query.answer("Access confirmed. You can use the bot now.", show_alert=True)
+        else:
+            await query.answer("You still need to join/request every required chat.", show_alert=True)
+
     @app.on_message(filters.command("start") & filters.private)
     async def start_handler(client: Client, message) -> None:
         await users.update_one(
@@ -28,6 +51,8 @@ def register_user_handlers(
             {"$set": {"name": message.from_user.first_name}},
             upsert=True,
         )
+        if not await require_force_subscription(client, message):
+            return
         if len(message.command) < 2:
             await message.reply(f"Hi {message.from_user.first_name}! Open a file link to get your files.")
             return
@@ -61,6 +86,8 @@ def register_user_handlers(
 
     @app.on_message(filters.command("help") & filters.private & ~filters.user(settings.admins))
     async def user_help_handler(_client: Client, message) -> None:
+        if not await require_force_subscription(_client, message):
+            return
         quota_text = (
             f"The first {settings.free_files} files are free. After that, choose a subscription pack, "
             "then pay with Telegram Stars or a configured UPI account."
@@ -80,6 +107,9 @@ def register_user_handlers(
 
     @app.on_callback_query(filters.regex(r"^pack:([a-z0-9_-]+)$"))
     async def pack_handler(_client: Client, query) -> None:
+        if query.from_user.id not in settings.admins and not await force_subscriptions.is_allowed(_client, query.from_user.id):
+            await query.answer("Join/request all required chats first.", show_alert=True)
+            return
         pack = await subscriptions.get_pack(query.matches[0].group(1))
         await query.answer()
         if not pack:
@@ -92,6 +122,9 @@ def register_user_handlers(
 
     @app.on_callback_query(filters.regex(r"^pay:([a-z0-9_-]+):(stars|upi)$"))
     async def payment_option_handler(client: Client, query) -> None:
+        if query.from_user.id not in settings.admins and not await force_subscriptions.is_allowed(client, query.from_user.id):
+            await query.answer("Join/request all required chats first.", show_alert=True)
+            return
         pack_id, option = query.matches[0].groups()
         pack = await subscriptions.get_pack(pack_id)
         await query.answer()
@@ -121,6 +154,9 @@ def register_user_handlers(
 
     @app.on_callback_query(filters.regex(r"^upi:([a-z0-9_-]+):([a-z0-9_-]+)$"))
     async def upi_account_handler(_client: Client, query) -> None:
+        if query.from_user.id not in settings.admins and not await force_subscriptions.is_allowed(_client, query.from_user.id):
+            await query.answer("Join/request all required chats first.", show_alert=True)
+            return
         pack_id, account_id = query.matches[0].groups()
         pack = await subscriptions.get_pack(pack_id)
         account = await subscriptions.get_upi_account(account_id)
@@ -139,6 +175,9 @@ def register_user_handlers(
 
     @app.on_callback_query(filters.regex(r"^upichoose:([a-z0-9_-]+)$"))
     async def choose_upi_handler(_client: Client, query) -> None:
+        if query.from_user.id not in settings.admins and not await force_subscriptions.is_allowed(_client, query.from_user.id):
+            await query.answer("Join/request all required chats first.", show_alert=True)
+            return
         pack_id = query.matches[0].group(1)
         pack = await subscriptions.get_pack(pack_id)
         await query.answer()
@@ -186,6 +225,8 @@ def register_user_handlers(
 
     @app.on_message(filters.command("upi") & filters.private)
     async def upi_reference_handler(client: Client, message) -> None:
+        if not await require_force_subscription(client, message):
+            return
         if len(message.command) < 4:
             await message.reply("Usage: `/upi PACK_ID UPI_ACCOUNT_ID UTR_NUMBER`")
             return
