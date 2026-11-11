@@ -56,7 +56,11 @@ class ForceSubscriptionService:
                 member = await client.get_chat_member(force["chat_id"], user_id)
             except Exception:
                 return False
-            status = str(getattr(member, "status", "")).lower()
+            raw_status = getattr(member, "status", "")
+            # Pyrogram returns a string, while Kurigram/client variants may
+            # return ChatMemberStatus.MEMBER-style enum values.
+            status = getattr(raw_status, "value", raw_status)
+            status = str(status).lower().rsplit(".", 1)[-1]
             if status in {"member", "administrator", "owner"}:
                 continue
             if status == "restricted" and bool(getattr(member, "is_member", False)):
