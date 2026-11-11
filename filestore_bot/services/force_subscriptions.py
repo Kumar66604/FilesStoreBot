@@ -81,11 +81,11 @@ class ForceSubscriptionService:
             return None
         buttons = [
             [InlineKeyboardButton(
-                f"{'Request to join' if force.get('mode') == 'request' else 'Join'}: {force.get('title', force['chat_id'])}",
+                f"{'Request access' if force.get('mode') == 'request' else 'Join'}  •  {force.get('title', force['chat_id'])}",
                 url=force["link"],
             )]
             for force in forces
         ]
-        buttons.append([InlineKeyboardButton("✅ I joined / requested", callback_data="forcesub:check")])
+        buttons.append([InlineKeyboardButton("I joined / requested access", callback_data="forcesub:check")])
         return InlineKeyboardMarkup(buttons)
 

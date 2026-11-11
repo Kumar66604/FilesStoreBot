@@ -68,8 +68,9 @@ def register_payment_handlers(
             payment.telegram_payment_charge_id,
         )
         await message.reply(
-            f"Payment successful. Your subscription is active until {expiry:%Y-%m-%d %H:%M} UTC.\n\n"
-            "Return to the main bot to continue downloading.",
+            "Payment confirmed\n\n"
+            f"Your subscription is active until {expiry:%Y-%m-%d %H:%M} UTC.\n\n"
+            "Return to FilesStore to continue downloading.",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("Open FilesStore bot", url=f"https://t.me/{settings.bot_username}")]]
             ),

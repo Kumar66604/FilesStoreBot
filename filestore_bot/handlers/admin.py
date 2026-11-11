@@ -1,6 +1,7 @@
 """Admin-only upload and batch-link handlers."""
 
 from pyrogram import Client, filters
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from ..config import Settings
 from ..services.files import FileService
@@ -21,6 +22,67 @@ def forwarded_message_info(message):
     return None, None
 
 
+def _admin_help_keyboard(active: str = "home") -> InlineKeyboardMarkup:
+    buttons = [
+        [
+            InlineKeyboardButton("File tools", callback_data="adminhelp:files"),
+            InlineKeyboardButton("Plans", callback_data="adminhelp:plans"),
+        ],
+        [
+            InlineKeyboardButton("UPI", callback_data="adminhelp:upi"),
+            InlineKeyboardButton("Access", callback_data="adminhelp:access"),
+        ],
+    ]
+    if active != "home":
+        buttons.append([InlineKeyboardButton("Admin home", callback_data="adminhelp:home")])
+    return InlineKeyboardMarkup(buttons)
+
+
+def _admin_help_text(section: str) -> str:
+    pages = {
+        "home": (
+            "FilesStore Admin\n\n"
+            "Use the sections below to manage files, plans, payments, and access.\n\n"
+            "Admins bypass free-file limits and subscription checks."
+        ),
+        "files": (
+            "File tools\n\n"
+            "Send media directly to the bot to store it.\n\n"
+            "/link\nReply to a text or media message to create a file link.\n\n"
+            "/batch\nCreate a link for a range of messages from the database channel.\n"
+            "1. Send /batch\n2. Forward the first message\n3. Forward the last message\n\n"
+            "/cancel\nCancel an active batch operation."
+        ),
+        "plans": (
+            "Subscription plans\n\n"
+            "/addpack ID STARS DAYS UPI_AMOUNT [NAME]\n"
+            "Example: /addpack monthly 100 30 99 Monthly Plan\n\n"
+            "/listpacks\nView all plans.\n\n"
+            "/delpack ID\nRemove a plan. At least one plan must remain.\n\n"
+            "/submode on|off|status\nControl subscription enforcement."
+        ),
+        "upi": (
+            "UPI payments\n\n"
+            "/addupi ID UPI_ID [LABEL]\n"
+            "Example: /addupi primary example@upi Main Account\n\n"
+            "/listupi\nView configured UPI accounts.\n\n"
+            "/delupi ID\nRemove a UPI account.\n\n"
+            "/approve USER_ID\nApprove a pending UPI payment.\n\n"
+            "/cancelsub USER_ID\nRevoke an active subscription.\n\n"
+            "Before approving, verify the UTR, amount, selected plan, and destination account."
+        ),
+        "access": (
+            "Access control\n\n"
+            "/addforce CHAT_ID join|request [NAME]\n"
+            "Add or replace a required channel or group.\n\n"
+            "/listforce\nView all required chats.\n\n"
+            "/delforce CHAT_ID\nRemove a required chat.\n\n"
+            "The bot must be an administrator in configured chats so it can verify membership and receive join requests."
+        ),
+    }
+    return pages[section]
+
+
 def register_admin_handlers(
     app: Client,
     settings: Settings,
@@ -34,38 +96,15 @@ def register_admin_handlers(
 
     @app.on_message(filters.command("help") & filters.private & admin_only)
     async def admin_help_handler(_client: Client, message) -> None:
-        await message.reply(
-            "FilesStore Bot - admin manual\n\n"
-            "FILE MANAGEMENT\n"
-            "Reply /link to any text or media message to store it and generate a link.\n"
-            "/link - Reply to a message to create a file link\n"
-            "/batch - Create a link for a range of stored messages\n"
-            "  1. Send /batch\n"
-            "  2. Forward the first DB-channel message\n"
-            "  3. Forward the last DB-channel message\n"
-            "/cancel - Cancel the current batch operation\n\n"
-            "SUBSCRIPTION PACKS\n"
-            "/addpack ID STARS DAYS UPI_AMOUNT [NAME]\n"
-            "  Example: /addpack monthly 100 30 99 Monthly Plan\n"
-            "/listpacks - List all available packs\n"
-            "/delpack ID - Remove a pack (at least one must remain)\n\n"
-            "UPI ACCOUNTS\n"
-            "/addupi ID UPI_ID [LABEL]\n"
-            "  Example: /addupi primary example@upi Main Account\n"
-            "/listupi - List configured UPI accounts\n"
-            "/delupi ID - Remove a UPI account\n\n"
-            "UPI APPROVAL\n"
-            "/approve USER_ID - Approve that user's pending UPI payment\n"
-            "/cancelsub USER_ID - Immediately revoke an active subscription\n"
-            "Before approving, verify the UTR, amount, selected pack, and destination account.\n\n"
-            "OTHER\n"
-            "/submode on|off|status - Enable or disable subscription enforcement\n"
-            "FORCE SUBSCRIPTION\n"
-            "/addforce CHAT_ID join|request [NAME] - Add or replace a required chat\n"
-            "/listforce - List required chats\n"
-            "/delforce CHAT_ID - Remove a required chat\n"
-            "/help - Show this admin manual\n"
-            "Admins bypass the free-file limit and subscription checks."
+        await message.reply(_admin_help_text("home"), reply_markup=_admin_help_keyboard())
+
+    @app.on_callback_query(filters.regex(r"^adminhelp:(home|files|plans|upi|access)$") & admin_only)
+    async def admin_help_section_handler(_client: Client, query) -> None:
+        section = query.matches[0].group(1)
+        await query.answer()
+        await query.message.edit_text(
+            _admin_help_text(section),
+            reply_markup=_admin_help_keyboard(section),
         )
 
     @app.on_message(filters.command("addpack") & filters.private & admin_only)

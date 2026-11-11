@@ -54,7 +54,12 @@ def register_user_handlers(
         if not await require_force_subscription(client, message):
             return
         if len(message.command) < 2:
-            await message.reply(f"Hi {message.from_user.first_name}! Open a file link to get your files.")
+            await message.reply(
+                f"Welcome to FilesStore, {message.from_user.first_name}!\n\n"
+                "Your private file delivery assistant. Open a file link from this bot to receive your files, "
+                "or explore the menu below.",
+                reply_markup=_welcome_keyboard(),
+            )
             return
         try:
             first, last = links.parse(message.command[1])
@@ -66,7 +71,7 @@ def register_user_handlers(
             message.from_user.id, requested
         ):
             await message.reply(
-                f"Your {settings.free_files} free files are finished. Choose a subscription pack:",
+                "Your free allowance has been used.\n\nChoose a plan to continue downloading:",
                 reply_markup=await _pack_keyboard(subscriptions),
             )
             return
@@ -88,21 +93,29 @@ def register_user_handlers(
     async def user_help_handler(_client: Client, message) -> None:
         if not await require_force_subscription(_client, message):
             return
-        quota_text = (
-            f"The first {settings.free_files} files are free. After that, choose a subscription pack, "
-            "then pay with Telegram Stars or a configured UPI account."
-            if await subscriptions.is_enabled()
-            else "Subscription mode is currently disabled, so downloads are available without payment checks."
-        )
         await message.reply(
-            "FilesStore Bot help\n\n"
-            "Open a file link sent by this bot to receive your files. "
-            f"{quota_text}\n\n"
-            "Commands:\n"
-            "/start - Open a file link or show the welcome message\n"
-            "/help - Show this help\n"
-            "/upi PACK_ID UPI_ACCOUNT_ID UTR - Submit a UPI payment reference\n\n"
-            "UPI payments are checked manually by an admin. Never submit a UPI reference until your payment is complete."
+            _help_home(settings),
+            reply_markup=_help_keyboard(),
+        )
+
+    @app.on_callback_query(filters.regex(r"^help:(home|files|payments|commands)$"))
+    async def help_section_handler(_client: Client, query) -> None:
+        section = query.matches[0].group(1)
+        await query.answer()
+        text = {
+            "home": _help_home(settings),
+            "files": _help_files(settings),
+            "payments": _help_payments(settings),
+            "commands": _help_commands(),
+        }[section]
+        await query.message.edit_text(text, reply_markup=_help_keyboard(section))
+
+    @app.on_callback_query(filters.regex(r"^plans:(back|open)$"))
+    async def plans_back_handler(_client: Client, query) -> None:
+        await query.answer()
+        await query.message.edit_text(
+            "Choose a plan to continue:",
+            reply_markup=await _pack_keyboard(subscriptions),
         )
 
     @app.on_callback_query(filters.regex(r"^pack:([a-z0-9_-]+)$"))
@@ -116,7 +129,9 @@ def register_user_handlers(
             await query.message.reply("That subscription pack is no longer available. Please try again.")
             return
         await query.message.reply(
-            f"{pack['name']} - {pack['days']} days\nChoose a payment method:",
+            f"{pack['name']}\n"
+            f"{pack['days']} days  •  {pack['stars']} Stars\n\n"
+            "Choose a payment method:",
             reply_markup=_method_keyboard(pack, await subscriptions.list_upi_accounts()),
         )
 
@@ -137,7 +152,8 @@ def register_user_handlers(
                 await query.message.reply("UPI payments are not configured yet.")
                 return
             await query.message.reply(
-                f"{pack['name']} - Rs {pack['upi_amount']}\nChoose which UPI account to use:",
+                f"{pack['name']}  •  Rs {pack['upi_amount']}\n\n"
+                "Choose a UPI account:",
                 reply_markup=_upi_keyboard(pack_id, accounts),
             )
             return
@@ -164,9 +180,13 @@ def register_user_handlers(
             await query.message.reply("That pack or UPI account is no longer available. Please try again.")
             return
         await query.message.reply(
-            f"UPI payment\n\nSend Rs {pack['upi_amount']} to {account['label']}:\n`{account['upi_id']}`\n\n"
-            f"After payment, send:\n`/upi {pack_id} {account_id} YOUR_UTR_NUMBER`\n\n"
-            "An admin will verify it and activate your subscription.",
+            f"UPI payment\n\n"
+            f"Amount: Rs {pack['upi_amount']}\n"
+            f"Account: {account['label']}\n"
+            f"UPI ID: `{account['upi_id']}`\n\n"
+            "After completing the transfer, submit your UTR using:\n"
+            f"`/upi {pack_id} {account_id} YOUR_UTR_NUMBER`\n\n"
+            "Your subscription will activate after admin verification.",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("Choose another UPI account", callback_data=f"upichoose:{pack_id}")]]
             ),
@@ -184,7 +204,7 @@ def register_user_handlers(
             await query.message.reply("That subscription pack is no longer available. Please try again.")
             return
         await query.message.reply(
-            f"{pack['name']} - Rs {pack['upi_amount']}\nChoose another UPI account:",
+            f"{pack['name']}  •  Rs {pack['upi_amount']}\n\nChoose another UPI account:",
             reply_markup=_upi_keyboard(pack_id, await subscriptions.list_upi_accounts()),
         )
 
@@ -222,7 +242,10 @@ async def _pack_keyboard(subscriptions: SubscriptionService) -> InlineKeyboardMa
     packs = await subscriptions.list_packs()
     return InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton(f"{pack['name']} - {pack['days']} days", callback_data=f"pack:{pack['id']}")]
+            [InlineKeyboardButton(
+                f"{pack['name']}  •  {pack['days']} days  •  {pack['stars']} Stars",
+                callback_data=f"pack:{pack['id']}",
+            )]
             for pack in packs
         ]
     )
@@ -232,15 +255,89 @@ def _method_keyboard(pack: dict, accounts: list[dict]) -> InlineKeyboardMarkup:
     buttons = [[InlineKeyboardButton("Pay with Telegram Stars", callback_data=f"pay:{pack['id']}:stars")]]
     if accounts:
         buttons.append([InlineKeyboardButton("Pay with UPI", callback_data=f"pay:{pack['id']}:upi")])
+    buttons.append([InlineKeyboardButton("Back to plans", callback_data="plans:back")])
     return InlineKeyboardMarkup(buttons)
 
 
 def _upi_keyboard(pack_id: str, accounts: list[dict]) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
+    buttons = [
+        [InlineKeyboardButton(account["label"], callback_data=f"upi:{pack_id}:{account['id']}")]
+        for account in accounts
+    ]
+    buttons.append([InlineKeyboardButton("Back to payment methods", callback_data=f"pack:{pack_id}")])
+    return InlineKeyboardMarkup(buttons)
+
+
+def _welcome_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("How it works", callback_data="help:files")],
+        [InlineKeyboardButton("Plans & payment", callback_data="plans:open")],
+        [InlineKeyboardButton("Help & commands", callback_data="help:commands")],
+    ])
+
+
+def _help_keyboard(active: str = "home") -> InlineKeyboardMarkup:
+    buttons = [
         [
-            [InlineKeyboardButton(account["label"], callback_data=f"upi:{pack_id}:{account['id']}")]
-            for account in accounts
-        ]
+            InlineKeyboardButton("How it works", callback_data="help:files"),
+            InlineKeyboardButton("Plans & payment", callback_data="help:payments"),
+        ],
+        [InlineKeyboardButton("Commands", callback_data="help:commands")],
+    ]
+    if active != "home":
+        buttons.append([InlineKeyboardButton("Help home", callback_data="help:home")])
+    if active == "payments":
+        buttons.append([InlineKeyboardButton("View available plans", callback_data="plans:open")])
+    return InlineKeyboardMarkup(buttons)
+
+
+def _help_home(settings: Settings) -> str:
+    quota = (
+        f"Your first {settings.free_files} files are free."
+        if settings.free_files
+        else "Access is subscription-based."
+    )
+    return (
+        "FilesStore Help\n\n"
+        "Store owners share a file link with you, and FilesStore delivers the files privately.\n\n"
+        f"{quota} After that, choose a plan and pay with Telegram Stars or UPI."
+    )
+
+
+def _help_files(settings: Settings) -> str:
+    delete_note = (
+        f"Files are automatically deleted after {settings.auto_delete_seconds // 60} minutes. Save them before then."
+        if settings.auto_delete_seconds
+        else "Automatic deletion is currently disabled."
+    )
+    return (
+        "How it works\n\n"
+        "1. Open a file link sent by this bot.\n"
+        "2. Complete the access check if requested.\n"
+        "3. Files are delivered directly in this private chat.\n\n"
+        f"{delete_note}"
+    )
+
+
+def _help_payments(settings: Settings) -> str:
+    if not settings.subscription_days:
+        return "Plans & payment\n\nSubscription plans are currently unavailable."
+    return (
+        "Plans & payment\n\n"
+        "After your free allowance is used, choose a subscription plan.\n\n"
+        "Telegram Stars: instant activation after Telegram confirms payment.\n"
+        "UPI: send the amount, submit the UTR, and wait for admin verification.\n\n"
+        "Your active plan extends from its current expiry date when you renew."
+    )
+
+
+def _help_commands() -> str:
+    return (
+        "User commands\n\n"
+        "/start - Open a file link or show the welcome menu\n"
+        "/help - Open this guided help\n"
+        "/upi PACK_ID ACCOUNT_ID UTR - Submit a UPI payment reference\n\n"
+        "Tip: use the buttons in the bot messages whenever possible. They keep your plan and payment details selected correctly."
     )
 
 
